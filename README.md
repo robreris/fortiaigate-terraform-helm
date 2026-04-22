@@ -96,15 +96,54 @@ terraform init
 
 ### 3. Deploy the cluster and application
 
+> **Note:** The Kubernetes and Helm providers need a live cluster endpoint to authenticate. On the very first deployment the cluster doesn't exist yet, so a single `terraform apply` will fail with `Unauthorized` errors. Always use the two-step approach below.
+
+**Step 3a — bootstrap VPC and EKS cluster (≈10–15 min):**
+
+```bash
+terraform apply -target=module.vpc -target=module.eks
+```
+
+Once complete, confirm the cluster control plane is reachable before continuing:
+
+```bash
+aws eks get-token --cluster-name <cluster_name> --region <aws_region>
+```
+
+A successful response (a JSON object containing a bearer token) means the EKS API server is up and Terraform's Kubernetes and Helm providers will be able to authenticate.
+
+**Step 3b - apply licenses**
+
+Licenses are mapped per node. First, retrieve node names after the initial apply:
+
+```bash
+kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
+```
+
+Then, add the `licenses` map to `terraform.tfvars`:
+
+```hcl
+licenses = {
+  "ip-10-0-1-100.us-east-1.compute.internal" = "/path/to/node1.lic"
+  "ip-10-0-2-200.us-east-1.compute.internal" = "/path/to/node2.lic"
+}
+```
+
+Terraform creates a `fortiaigate-license-config` ConfigMap in the `fortiaigate` namespace and updates the Helm release to reference it. The license-manager DaemonSet picks up the new ConfigMap automatically.
+
+**Step 3c — deploy EFS, storage, and FortiAIGate (≈5–10 min):**
+
 ```bash
 terraform apply
 ```
 
-This takes approximately 15–20 minutes. Terraform provisions resources in order:
-1. VPC, subnets, NAT gateway
-2. EKS cluster and node groups
+Terraform provisions the remaining resources in order:
+1. VPC, subnets, NAT gateway *(already complete)*
+2. EKS cluster and node groups *(already complete)*
 3. EFS filesystem and CSI driver
 4. FortiAIGate namespace, license ConfigMap, and Helm release
+
+Subsequent `terraform apply` runs (e.g. to update variables or licenses) can be run as a single step — the two-step bootstrap is only needed on the initial deployment.
 
 ### 4. Configure kubectl
 
@@ -126,17 +165,17 @@ All pods should reach `Running` state within a few minutes of the Helm release c
 
 ---
 
-## Adding licenses
+## Adding/updating licenses
 
-Licenses are mapped per node. Node names are not known until after the cluster is created.
+To update the licenses associated with cluster nodes:
 
-**Step 1** — retrieve node names after the initial apply:
+**Step 1** — retrieve node names:
 
 ```bash
 kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
 ```
 
-**Step 2** — add the `licenses` map to `terraform.tfvars`:
+**Step 2** — update the `licenses` map in `terraform.tfvars`:
 
 ```hcl
 licenses = {
@@ -150,8 +189,6 @@ licenses = {
 ```bash
 terraform apply
 ```
-
-Terraform creates a `fortiaigate-license-config` ConfigMap in the `fortiaigate` namespace and updates the Helm release to reference it. The license-manager DaemonSet picks up the new ConfigMap automatically.
 
 ---
 
@@ -238,6 +275,7 @@ Files are merged left-to-right before the built-in `set {}` blocks, so Terraform
 ## Teardown
 
 ```bash
+helm uninstall fortiaigate -n fortiaigate
 terraform destroy
 ```
 
@@ -247,14 +285,9 @@ terraform destroy
 
 ## Troubleshooting
 
-**Provider connection errors during `terraform plan`**
+**`Unauthorized` errors when creating Kubernetes resources**
 
-The helm and kubernetes providers need a live cluster endpoint. On the first run, the cluster doesn't exist yet. Target the infrastructure first:
-
-```bash
-terraform apply -target=module.vpc -target=module.eks
-terraform apply
-```
+This happens on the first deployment when the cluster doesn't exist yet. Follow the two-step process in [Deploy the cluster and application](#3-deploy-the-cluster-and-application), using `aws eks get-token` to confirm the cluster is ready before running the second `terraform apply`.
 
 **Pods stuck in `Pending`**
 

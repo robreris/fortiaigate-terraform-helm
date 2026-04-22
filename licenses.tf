@@ -4,6 +4,15 @@ resource "kubernetes_config_map" "licenses" {
   metadata {
     name      = "fortiaigate-license-config"
     namespace = kubernetes_namespace.fortiaigate.metadata[0].name
+
+    labels = {
+      "app.kubernetes.io/managed-by" = "Helm"
+    }
+
+    annotations = {
+      "meta.helm.sh/release-name"      = "fortiaigate"
+      "meta.helm.sh/release-namespace" = kubernetes_namespace.fortiaigate.metadata[0].name
+    }
   }
 
   # Read each license file from disk and store its content keyed by node name.

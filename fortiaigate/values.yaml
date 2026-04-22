@@ -336,13 +336,16 @@ postgresql:
     # Prefer server ciphers
     preferServerCiphers: true
 
-  # Enable volumePermissions for tls support
+  # Enable volumePermissions for tls support.
+  # runAsUser 1001 matches the EFS access point uid so chown is a no-op EFS allows.
   volumePermissions:
     enabled: true
     image:
       registry: docker.io
       repository: bitnamilegacy/os-shell
       tag: 12-debian-12-r50
+    securityContext:
+      runAsUser: 1001
 
   primary:
     persistence:

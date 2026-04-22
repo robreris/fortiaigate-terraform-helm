@@ -12,6 +12,10 @@ module "eks" {
   # For production, restrict cluster_endpoint_public_access_cidrs or disable public access.
   cluster_endpoint_public_access = true
 
+  # Grant the IAM identity running Terraform admin access via an EKS Access Entry.
+  # Without this, the cluster creator has no Kubernetes API permissions in module v20+.
+  enable_cluster_creator_admin_permissions = true
+
   # Core addons. The EFS CSI driver is managed separately in storage.tf
   # to avoid a circular dependency with its IRSA role.
   cluster_addons = {
@@ -36,6 +40,16 @@ module "eks" {
         labels = {
           fortiaigate-role = "app"
         }
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = {
+              volume_size           = 250
+              volume_type           = "gp3"
+              delete_on_termination = true
+            }
+          }
+        }
       }
     },
     var.gpu_enabled ? {
@@ -54,6 +68,16 @@ module "eks" {
             key    = "fortiaigate-gpu"
             value  = "true"
             effect = "NO_SCHEDULE"
+          }
+        }
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = {
+              volume_size           = 250
+              volume_type           = "gp3"
+              delete_on_termination = true
+            }
           }
         }
       }

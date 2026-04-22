@@ -30,6 +30,7 @@ spec:
         component: logd
         version: v1
     spec:
+      {{- if .Values.global.licenses }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,6 +40,7 @@ spec:
                     operator: In
                     values:
                       {{- keys .Values.global.licenses | toYaml | nindent 22 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

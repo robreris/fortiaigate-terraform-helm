@@ -28,6 +28,15 @@ resource "kubernetes_secret" "tls" {
   metadata {
     name      = "fortiaigate-tls-secret"
     namespace = kubernetes_namespace.fortiaigate.metadata[0].name
+
+    labels = {
+      "app.kubernetes.io/managed-by" = "Helm"
+    }
+
+    annotations = {
+      "meta.helm.sh/release-name"      = "fortiaigate"
+      "meta.helm.sh/release-namespace" = kubernetes_namespace.fortiaigate.metadata[0].name
+    }
   }
 
   type = "kubernetes.io/tls"

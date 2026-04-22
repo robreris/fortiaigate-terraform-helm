@@ -88,6 +88,8 @@ resource "kubernetes_storage_class" "efs" {
     provisioningMode = "efs-ap"
     fileSystemId     = aws_efs_file_system.fortiaigate.id
     directoryPerms   = "700"
+    uid              = "1001"
+    gid              = "1001"
   }
 
   depends_on = [aws_eks_addon.efs_csi, aws_efs_mount_target.fortiaigate]

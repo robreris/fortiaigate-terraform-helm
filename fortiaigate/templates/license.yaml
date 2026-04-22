@@ -1,3 +1,4 @@
+{{- if not .Values.license.existingConfigMap }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,5 +12,6 @@ data:
 {{ $.Files.Get $licenseFile | indent 4 }}
 {{- else }}
 {{ "" | indent 4 }}
+{{- end }}
 {{- end }}
 {{- end }}

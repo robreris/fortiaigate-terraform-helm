@@ -1,6 +1,6 @@
-# FortiAIGate Terraform + Helm Deployment
+# FortiAIGate AWS EKS Terraform + Helm Deployment
 
-Deploys a FortiAIGate cluster on AWS EKS using Terraform and the bundled Helm chart. A single `terraform apply` provisions the VPC, EKS cluster, EFS storage, and the FortiAIGate application stack.
+Deploys a FortiAIGate cluster on AWS EKS using Terraform and the bundled Helm chart.
 
 ## Architecture
 
@@ -47,6 +47,8 @@ FortiAIGate services deployed by the Helm chart:
 - AWS credentials configured (`aws configure`, environment variables, or an IAM instance/pod role)
 - Sufficient IAM permissions to create VPC, EKS, EFS, IAM roles, and EC2 instances
 - FortiAIGate container images pushed to a registry accessible from EKS (e.g. ECR)
+- For AWS ALB ingress: an ACM certificate in the same AWS region as `aws_region`
+- For DNS publication: an existing Route 53 hosted zone for the domain used by `ingress_host`
 
 ### Images
 
@@ -86,6 +88,24 @@ Edit `terraform.tfvars` and set at minimum:
 image_repository = "123456789.dkr.ecr.us-east-1.amazonaws.com/fortiaigate"
 ```
 
+For AWS ALB ingress, also set:
+
+```hcl
+ingress_class = "alb"
+ingress_host  = "fortiaigate.example.com"
+aws_load_balancer_controller_enabled = true
+ingress_annotations = {
+  "kubernetes.io/ingress.class"                = "alb"
+  "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+  "alb.ingress.kubernetes.io/target-type"      = "ip"
+  "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTPS\":443}]"
+  "alb.ingress.kubernetes.io/backend-protocol" = "HTTPS"
+  "alb.ingress.kubernetes.io/certificate-arn"  = "arn:aws:acm:<aws_region>:123456789:certificate/..."
+}
+```
+
+The ACM certificate ARN must be in the same region as `aws_region`. If `aws_load_balancer_controller_enabled = false`, this stack still creates the Ingress object, but an ALB is created only if an AWS Load Balancer Controller is already installed and watching the cluster.
+
 See [Variable reference](#variable-reference) for all options.
 
 ### 2. Initialize Terraform
@@ -104,9 +124,11 @@ terraform init
 terraform apply -target=module.vpc -target=module.eks
 ```
 
-Once complete, confirm the cluster control plane is reachable before continuing:
+Once complete, run a kubeconfig update and confirm the cluster control plane is reachable before continuing:
 
 ```bash
+aws eks update-kubeconfig --region <aws_region> --name <cluster_name>
+
 aws eks get-token --cluster-name <cluster_name> --region <aws_region>
 ```
 
@@ -141,7 +163,8 @@ Terraform provisions the remaining resources in order:
 1. VPC, subnets, NAT gateway *(already complete)*
 2. EKS cluster and node groups *(already complete)*
 3. EFS filesystem and CSI driver
-4. FortiAIGate namespace, license ConfigMap, and Helm release
+4. AWS Load Balancer Controller when `ingress_class = "alb"` and `aws_load_balancer_controller_enabled = true`
+5. FortiAIGate namespace, license ConfigMap, and Helm release
 
 Subsequent `terraform apply` runs (e.g. to update variables or licenses) can be run as a single step — the two-step bootstrap is only needed on the initial deployment.
 
@@ -162,6 +185,87 @@ kubectl get pvc -n fortiaigate
 ```
 
 All pods should reach `Running` state within a few minutes of the Helm release completing.
+
+If using AWS ALB ingress, also confirm the ALB controller is installed and the Ingress has an ALB DNS name:
+
+```bash
+kubectl get deployment -n kube-system aws-load-balancer-controller
+kubectl get ingress -n fortiaigate fortiaigate-ingress
+```
+
+Wait until the ingress `ADDRESS` column is populated before creating DNS records.
+
+### 6. Publish Route 53 DNS for AWS ALB
+
+Use this step only when `ingress_class = "alb"` and the Ingress has a populated ALB hostname.
+
+Set the hosted zone name that contains `ingress_host`:
+
+```bash
+export ROUTE53_ZONE_NAME="example.com"
+export APP_HOST="$(terraform output -raw ingress_host)"
+export AWS_REGION="$(terraform output -raw aws_region)"
+```
+
+Discover the ALB DNS name and hosted zone ID, then upsert an alias `A` record in Route 53:
+
+```bash
+export ALB_DNS_NAME="$(kubectl get ingress -n fortiaigate fortiaigate-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+export ROUTE53_ZONE_ID="$(aws route53 list-hosted-zones-by-name \
+  --dns-name "${ROUTE53_ZONE_NAME}." \
+  --query "HostedZones[?Name=='${ROUTE53_ZONE_NAME}.'].Id | [0]" \
+  --output text | sed 's|/hostedzone/||')"
+export ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+  --region "${AWS_REGION}" \
+  --query "LoadBalancers[?DNSName=='${ALB_DNS_NAME}'].CanonicalHostedZoneId | [0]" \
+  --output text)"
+
+for value in AWS_REGION ALB_DNS_NAME ROUTE53_ZONE_ID ALB_ZONE_ID; do
+  test "${!value}" != "" && test "${!value}" != "None" || {
+    echo "${value} was not discovered"
+    exit 1
+  }
+done
+
+cat > /tmp/fortiaigate-route53-change.json <<EOF
+{
+  "Comment": "Point ${APP_HOST} to the FortiAIGate ALB",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "${APP_HOST}",
+        "Type": "A",
+        "AliasTarget": {
+          "HostedZoneId": "${ALB_ZONE_ID}",
+          "DNSName": "dualstack.${ALB_DNS_NAME}",
+          "EvaluateTargetHealth": false
+        }
+      }
+    }
+  ]
+}
+EOF
+
+aws route53 change-resource-record-sets \
+  --hosted-zone-id "${ROUTE53_ZONE_ID}" \
+  --change-batch file:///tmp/fortiaigate-route53-change.json
+```
+
+If `ROUTE53_ZONE_ID` resolves to the wrong hosted zone because you have both public and private zones with the same name, set `ROUTE53_ZONE_ID` manually to the public hosted zone ID and rerun the `change-resource-record-sets` command.
+
+Verify DNS after Route 53 propagation:
+
+```bash
+aws route53 list-resource-record-sets \
+  --hosted-zone-id "${ROUTE53_ZONE_ID}" \
+  --query "ResourceRecordSets[?Name=='${APP_HOST}.']"
+
+aws route53 test-dns-answer \
+  --hosted-zone-id "${ROUTE53_ZONE_ID}" \
+  --record-name "${APP_HOST}" \
+  --record-type A
+```
 
 ---
 
@@ -222,6 +326,7 @@ The NGINX ingress controller must be installed in the cluster separately (e.g. v
 ```hcl
 ingress_class = "alb"
 ingress_host  = "fortiaigate.example.com"
+aws_load_balancer_controller_enabled = true
 ingress_annotations = {
   "kubernetes.io/ingress.class"                = "alb"
   "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
@@ -232,7 +337,9 @@ ingress_annotations = {
 }
 ```
 
-The AWS Load Balancer Controller must be installed in the cluster. See the [AWS Load Balancer Controller docs](https://kubernetes-sigs.github.io/aws-load-balancer-controller/).
+When `ingress_class = "alb"` and `aws_load_balancer_controller_enabled = true`, Terraform installs the AWS Load Balancer Controller in `kube-system` using IRSA and the AWS EKS Helm chart. Set `aws_load_balancer_controller_enabled = false` only if the controller is already managed outside this stack.
+
+The ACM certificate ARN used by `alb.ingress.kubernetes.io/certificate-arn` must be in the same AWS region as this deployment. The AWS Load Balancer Controller creates the ALB, but it does not create Route 53 records by itself; manage DNS separately, for example with ExternalDNS or a Route 53 alias/CNAME after the ALB hostname is available.
 
 ---
 
@@ -265,6 +372,8 @@ Files are merged left-to-right before the built-in `set {}` blocks, so Terraform
 | `ingress_class` | string | `"nginx"` | Ingress class (`nginx` or `alb`) |
 | `ingress_host` | string | `""` | Ingress hostname (empty = match all) |
 | `ingress_annotations` | map(string) | `{}` | Extra ingress annotations |
+| `aws_load_balancer_controller_enabled` | bool | `true` | Install AWS Load Balancer Controller when `ingress_class = "alb"` |
+| `aws_load_balancer_controller_chart_version` | string | `"1.14.0"` | AWS Load Balancer Controller Helm chart version |
 | `storage_size` | string | `"100Gi"` | Shared EFS PVC size |
 | `licenses` | map(string) | `{}` | Node name → local license file path |
 | `update_strategy` | string | `"Recreate"` | `Recreate` or `RollingUpdate` |
@@ -274,9 +383,74 @@ Files are merged left-to-right before the built-in `set {}` blocks, so Terraform
 
 ## Teardown
 
+Best practice is to delete Helm-managed workloads first, wait for Kubernetes cleanup to finish, and then destroy the Terraform-managed infrastructure. This avoids `context deadline exceeded` errors caused by Terraform deleting cluster infrastructure while Helm releases, load balancers, PVCs, or controller finalizers are still terminating.
+
+### 1. Configure kubectl
+
 ```bash
-helm uninstall fortiaigate -n fortiaigate
+$(terraform output -raw configure_kubectl)
+```
+
+### 2. List Helm releases
+
+```bash
+helm list -A
+```
+
+Expected releases for this stack are:
+
+- `fortiaigate` in the `fortiaigate` namespace
+- `aws-load-balancer-controller` in `kube-system` when `ingress_class = "alb"` and `aws_load_balancer_controller_enabled = true`
+
+### 3. Delete application Helm releases first
+
+```bash
+helm uninstall fortiaigate -n fortiaigate --wait --timeout 20m
+```
+
+Wait for application resources to terminate:
+
+```bash
+kubectl get pods,pvc,ingress -n fortiaigate
+kubectl wait --for=delete ingress/fortiaigate-ingress -n fortiaigate --timeout=20m
+kubectl wait --for=delete pod --all -n fortiaigate --timeout=20m
+```
+
+If the namespace is empty except for Helm history or retained resources, continue. If resources remain, inspect them before destroying the cluster:
+
+```bash
+kubectl get all,pvc,ingress,secrets,configmaps -n fortiaigate
+kubectl describe ingress fortiaigate-ingress -n fortiaigate
+```
+
+### 4. Delete infrastructure controller Helm releases
+
+If Terraform installed the AWS Load Balancer Controller, remove it after the application ingress has been deleted and the ALB has been cleaned up:
+
+```bash
+helm uninstall aws-load-balancer-controller -n kube-system --wait --timeout 10m
+```
+
+Confirm no AWS Load Balancer Controller pods remain:
+
+```bash
+kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+```
+
+### 5. Destroy Terraform resources
+
+After Helm releases are gone, run:
+
+```bash
 terraform destroy
+```
+
+If `terraform destroy` still times out, rerun it after checking for stuck Kubernetes resources:
+
+```bash
+kubectl get namespaces
+kubectl get all,pvc,ingress -A
+helm list -A
 ```
 
 > **Note:** The EFS filesystem has `reclaim_policy = Retain`. After `terraform destroy`, the EFS filesystem and its data remain in AWS and must be deleted manually if no longer needed.

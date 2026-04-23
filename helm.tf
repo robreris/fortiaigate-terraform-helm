@@ -65,6 +65,7 @@ resource "helm_release" "fortiaigate" {
     kubernetes_storage_class.efs,
     kubernetes_config_map.licenses,
     kubernetes_secret.tls,
+    helm_release.aws_load_balancer_controller,
   ]
 
   # Values are merged left-to-right; later entries take precedence.

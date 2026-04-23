@@ -75,6 +75,18 @@ variable "ingress_annotations" {
   default     = {}
 }
 
+variable "aws_load_balancer_controller_enabled" {
+  description = "Install AWS Load Balancer Controller when ingress_class is 'alb'. Disable if a controller is already managed outside this Terraform stack."
+  type        = bool
+  default     = true
+}
+
+variable "aws_load_balancer_controller_chart_version" {
+  description = "Helm chart version for aws-load-balancer-controller from the AWS EKS charts repository."
+  type        = string
+  default     = "1.14.0"
+}
+
 variable "storage_size" {
   description = "Size of the shared EFS-backed PVC"
   type        = string

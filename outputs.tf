@@ -3,6 +3,11 @@ output "cluster_name" {
   value       = module.eks.cluster_name
 }
 
+output "aws_region" {
+  description = "AWS region used for the deployment"
+  value       = var.aws_region
+}
+
 output "configure_kubectl" {
   description = "Run this command to configure kubectl for the new cluster"
   value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"

@@ -1,3 +1,27 @@
+{{- $className := .Values.ingress.className }}
+{{- $defaultAnnotations := dict }}
+{{- if eq $className "alb" }}
+{{- $_ := set $defaultAnnotations "kubernetes.io/ingress.class" "alb" }}
+{{- $_ := set $defaultAnnotations "alb.ingress.kubernetes.io/scheme" "internet-facing" }}
+{{- $_ := set $defaultAnnotations "alb.ingress.kubernetes.io/target-type" "ip" }}
+{{- if .Values.tls.enabled }}
+{{- $_ := set $defaultAnnotations "alb.ingress.kubernetes.io/backend-protocol" "HTTPS" }}
+{{- $_ := set $defaultAnnotations "alb.ingress.kubernetes.io/healthcheck-protocol" "HTTPS" }}
+{{- end }}
+{{- else if eq $className "nginx" }}
+{{- if .Values.tls.enabled }}
+{{- $_ := set $defaultAnnotations "nginx.ingress.kubernetes.io/backend-protocol" "HTTPS" }}
+{{- $_ := set $defaultAnnotations "nginx.ingress.kubernetes.io/healthcheck-protocol" "HTTPS" }}
+{{- $_ := set $defaultAnnotations "nginx.ingress.kubernetes.io/ssl-redirect" "true" }}
+{{- $_ := set $defaultAnnotations "nginx.ingress.kubernetes.io/force-ssl-redirect" "false" }}
+{{- end }}
+{{- else if eq $className "traefik" }}
+{{- if .Values.tls.enabled }}
+{{- $_ := set $defaultAnnotations "traefik.ingress.kubernetes.io/router.entrypoints" "websecure" }}
+{{- $_ := set $defaultAnnotations "traefik.ingress.kubernetes.io/router.middlewares" "default-redirect-https@kubernetescrd" }}
+{{- end }}
+{{- end }}
+{{- $annotations := mergeOverwrite (dict) $defaultAnnotations (.Values.ingress.annotations | default dict) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -6,46 +30,12 @@ metadata:
     app.kubernetes.io/name: fortiaigate
     app.kubernetes.io/part-of: fortiaigate-platform
     app.kubernetes.io/managed-by: helm
+  {{- if $annotations }}
   annotations:
-    {{- $className := .Values.ingress.className }}
-    {{- /* Priority 1: User-defined annotations take precedence */}}
-    {{- if .Values.ingress.annotations }}
-    {{- range $key, $value := .Values.ingress.annotations }}
+    {{- range $key, $value := $annotations }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}
-    {{- else if eq $className "alb" }}
-    {{- /* Priority 2: AWS ALB default annotations */}}
-    # === AWS ALB ===
-    kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    {{- if .Values.tls.enabled }}
-    alb.ingress.kubernetes.io/backend-protocol: HTTPS
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
-    {{- end }}
-    {{- else if eq $className "nginx" }}
-    {{- /* Priority 2: NGINX default annotations */}}
-    # === NGINX ===
-    {{- if .Values.tls.enabled }}
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    nginx.ingress.kubernetes.io/healthcheck-protocol: HTTPS
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-    {{- end }}
-    {{- else if eq $className "traefik" }}
-    {{- /* Priority 2: Traefik default annotations */}}
-    # === Traefik ===
-    {{- if .Values.tls.enabled }}
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
-    {{- end }}
-    {{- else }}
-    {{- /* Priority 2: Other ingress controllers (no defaults) */}}
-    # === Other ingress controllers ===
-    {{- if .Values.tls.enabled }}
-    # Backend TLS annotations for other ingress controllers
-    {{- end }}
-    {{- end }}
+  {{- end }}
 
 spec:
   {{- if .Values.ingress.className }}
@@ -92,4 +82,3 @@ spec:
                 name: core
                 port:
                   number: 8080
-

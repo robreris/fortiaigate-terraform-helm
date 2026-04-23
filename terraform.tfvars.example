@@ -41,13 +41,14 @@ ingress_host  = ""  # e.g. "fortiaigate.example.com"
 # For AWS ALB ingress with HTTPS:
 # ingress_class = "alb"
 # ingress_host  = "fortiaigate.example.com"
+# aws_load_balancer_controller_enabled = true
 # ingress_annotations = {
 #   "kubernetes.io/ingress.class"                  = "alb"
 #   "alb.ingress.kubernetes.io/scheme"             = "internet-facing"
 #   "alb.ingress.kubernetes.io/target-type"        = "ip"
 #   "alb.ingress.kubernetes.io/listen-ports"       = "[{\"HTTPS\":443}]"
 #   "alb.ingress.kubernetes.io/backend-protocol"   = "HTTPS"
-#   "alb.ingress.kubernetes.io/certificate-arn"    = "arn:aws:acm:us-east-1:123456789:certificate/..."
+#   "alb.ingress.kubernetes.io/certificate-arn"    = "arn:aws:acm:us-east-1:123456789:certificate/..." # must be in aws_region
 # }
 
 # ---------------------------------------------------------------------------

@@ -53,6 +53,48 @@ locals {
   ingress_annotation_values = length(var.ingress_annotations) > 0 ? [yamlencode({
     ingress = { annotations = var.ingress_annotations }
   })] : []
+
+  # Internal ALB: override the chart's default internet-facing scheme.
+  # Placed before ingress_annotation_values so explicit ingress_annotations can still override.
+  internal_alb_values = (var.internal && var.ingress_class == "alb") ? [yamlencode({
+    ingress = {
+      annotations = {
+        "alb.ingress.kubernetes.io/scheme" = "internal"
+      }
+    }
+  })] : []
+
+  # Terraform owns the TLS Secret, so pass both the name and a stable checksum
+  # into Helm. Pod template annotations use the checksum to trigger rollouts
+  # when Terraform regenerates the certificate.
+  tls_secret_name     = kubernetes_secret.tls.metadata[0].name
+  tls_secret_checksum = sha256(tls_self_signed_cert.fortiaigate.cert_pem)
+  tls_values = [yamlencode({
+    tls = {
+      existingSecret         = local.tls_secret_name
+      existingSecretChecksum = local.tls_secret_checksum
+    }
+    postgresql = {
+      tls = {
+        certificatesSecret = local.tls_secret_name
+      }
+      primary = {
+        podAnnotations = {
+          "checksum/tls" = local.tls_secret_checksum
+        }
+      }
+    }
+    redis = {
+      tls = {
+        existingSecret = local.tls_secret_name
+      }
+      master = {
+        podAnnotations = {
+          "checksum/tls" = local.tls_secret_checksum
+        }
+      }
+    }
+  })]
 }
 
 resource "helm_release" "fortiaigate" {
@@ -73,7 +115,9 @@ resource "helm_release" "fortiaigate" {
   values = concat(
     [for f in var.extra_values_files : file(f)],
     local.gpu_values,
+    local.internal_alb_values,
     local.ingress_annotation_values,
+    local.tls_values,
     local.license_node_values,
   )
 
@@ -112,9 +156,5 @@ resource "helm_release" "fortiaigate" {
   set {
     name  = "license.existingConfigMap"
     value = local.license_cm_name
-  }
-  set {
-    name  = "tls.existingSecret"
-    value = kubernetes_secret.tls.metadata[0].name
   }
 }

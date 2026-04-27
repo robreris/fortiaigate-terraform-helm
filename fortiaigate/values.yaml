@@ -37,6 +37,12 @@ fortiaigate:
   gpu:
     enabled: true  # Set to false to run on non-GPU nodes
 
+  # Placement for GPU-backed workloads such as Triton.
+  # Terraform sets this automatically when gpu_enabled = true.
+  gpuWorkloadPlacement:
+    nodeSelector: {}
+    tolerations: []
+
   # Update strategy for all Deployment workloads (api, webui, core, logd, triton, scanners).
   # Does NOT apply to the license-manager DaemonSet, which always uses RollingUpdate.
   #
@@ -242,6 +248,10 @@ scanners:
     #     memory: 256Mi
 
 license_manager:
+  placement:
+    nodeSelector: {}
+    tolerations: []
+
   resources:
     limits:
       cpu: 500m
@@ -308,6 +318,8 @@ tls:
   # You need to provide your own certificate and key
   cert: files/certificate/dflt.crt
   key: files/certificate/dflt.key
+  existingSecret: ""
+  existingSecretChecksum: ""
 
 # PostgreSQL Configuration
 # For advanced configuration options, refer to:

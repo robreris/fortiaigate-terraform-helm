@@ -50,7 +50,7 @@ spec:
     {{- else }}
     - "*.local"
     {{- end }}
-    secretName: fortiaigate-tls-secret
+    secretName: {{ include "fortiaigate.tlsSecretName" . }}
   {{- end }}
 
   rules:

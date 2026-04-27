@@ -38,8 +38,9 @@ gpu_enabled = false
 ingress_class = "nginx"
 ingress_host  = ""  # e.g. "fortiaigate.example.com"
 
-# For AWS ALB ingress with HTTPS:
+# For AWS ALB ingress with HTTPS (internet-facing):
 # ingress_class = "alb"
+# internal = false
 # ingress_host  = "fortiaigate.example.com"
 # aws_load_balancer_controller_enabled = true
 # ingress_annotations = {
@@ -50,6 +51,17 @@ ingress_host  = ""  # e.g. "fortiaigate.example.com"
 #   "alb.ingress.kubernetes.io/backend-protocol"   = "HTTPS"
 #   "alb.ingress.kubernetes.io/certificate-arn"    = "arn:aws:acm:us-east-1:123456789:certificate/..." # must be in aws_region
 # }
+
+# For an internal (private) deployment — ALB reachable only within the VPC and
+# connected networks (VPN, Direct Connect, Transit Gateway).
+# After apply, retrieve the ALB hostname from the alb_dns_name output and
+# configure the FortiGate and chatbot to use it.
+#   FortiGate  → http(s)://<alb_dns_name>/
+#   Chatbot    → http(s)://<alb_dns_name>/api/  or  /v1/
+#
+# ingress_class                        = "alb"
+# aws_load_balancer_controller_enabled = true
+# internal                             = true
 
 # ---------------------------------------------------------------------------
 # Storage

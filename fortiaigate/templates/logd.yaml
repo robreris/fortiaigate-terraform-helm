@@ -24,7 +24,7 @@ spec:
     metadata:
       annotations:
         # This is the key that triggers a restart when TLS certificates change
-        checksum/config: {{ printf "%s%s" (tpl (.Files.Get .Values.tls.cert) $) (tpl (.Files.Get .Values.tls.key) $) | sha256sum }}
+        checksum/tls: {{ include "fortiaigate.tlsChecksum" . | quote }}
       labels:
         app: logd
         component: logd
@@ -148,7 +148,7 @@ spec:
       {{- if or .Values.tls.enabled .Values.redis.tls.enabled .Values.postgresql.tls.enabled }}
       - name: tls-certs
         secret:
-          secretName: fortiaigate-tls-secret
+          secretName: {{ include "fortiaigate.tlsSecretName" . }}
       {{- end }}
       {{- with .Values.fortiaigate.image.pullSecrets }}
       imagePullSecrets:

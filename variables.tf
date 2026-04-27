@@ -110,3 +110,9 @@ variable "extra_values_files" {
   type        = list(string)
   default     = []
 }
+
+variable "internal" {
+  description = "Deploy as an internal (private) service. Sets the ALB scheme to 'internal' so it is only reachable within the VPC and connected networks. Requires ingress_class = 'alb'."
+  type        = bool
+  default     = false
+}

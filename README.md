@@ -47,8 +47,8 @@ FortiAIGate services deployed by the Helm chart:
 - AWS credentials configured (`aws configure`, environment variables, or an IAM instance/pod role)
 - Sufficient IAM permissions to create VPC, EKS, EFS, IAM roles, and EC2 instances
 - FortiAIGate container images pushed to a registry accessible from EKS (e.g. ECR)
-- For AWS ALB ingress: an ACM certificate in the same AWS region as `aws_region`
-- For DNS publication: an existing Route 53 hosted zone for the domain used by `ingress_host`
+- For internet-facing AWS ALB ingress: an ACM certificate in the same AWS region as `aws_region`
+- For internet-facing ALB with custom DNS: an existing Route 53 hosted zone for the domain used by `ingress_host`
 
 ### Images
 
@@ -88,7 +88,7 @@ Edit `terraform.tfvars` and set at minimum:
 image_repository = "123456789.dkr.ecr.us-east-1.amazonaws.com/fortiaigate"
 ```
 
-For AWS ALB ingress, also set:
+For an internet-facing AWS ALB, also set:
 
 ```hcl
 ingress_class = "alb"
@@ -104,7 +104,18 @@ ingress_annotations = {
 }
 ```
 
-The ACM certificate ARN must be in the same region as `aws_region`. If `aws_load_balancer_controller_enabled = false`, this stack still creates the Ingress object, but an ALB is created only if an AWS Load Balancer Controller is already installed and watching the cluster.
+For an internal (private) ALB — reachable only within the VPC and connected networks:
+
+```hcl
+ingress_class                        = "alb"
+aws_load_balancer_controller_enabled = true
+internal                             = true
+ingress_annotations = {}
+```
+
+After apply, retrieve the ALB hostname from the `alb_dns_name` output (see [Verify the deployment](#5-verify-the-deployment)) and configure callers to use it. No ACM certificate or Route 53 entry is required.
+
+The ACM certificate ARN (internet-facing only) must be in the same region as `aws_region`. If `aws_load_balancer_controller_enabled = false`, this stack still creates the Ingress object, but an ALB is created only if an AWS Load Balancer Controller is already installed and watching the cluster.
 
 See [Variable reference](#variable-reference) for all options.
 
@@ -193,11 +204,23 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 kubectl get ingress -n fortiaigate fortiaigate-ingress
 ```
 
-Wait until the ingress `ADDRESS` column is populated before creating DNS records.
+Wait until the ingress `ADDRESS` column is populated. The `alb_dns_name` Terraform output surfaces the same hostname:
 
-### 6. Publish Route 53 DNS for AWS ALB
+```bash
+terraform output alb_dns_name
+```
 
-Use this step only when `ingress_class = "alb"` and the Ingress has a populated ALB hostname.
+For an internal deployment, this is the hostname to configure on callers:
+
+| Caller | URL |
+|--------|-----|
+| FortiGate → WebUI | `https://<alb_dns_name>/` |
+| Chatbot → API | `https://<alb_dns_name>/api/` |
+| Chatbot → Core | `https://<alb_dns_name>/v1/` |
+
+### 6. Publish Route 53 DNS for internet-facing AWS ALB
+
+Use this step only when `ingress_class = "alb"`, `internal = false`, and the Ingress has a populated ALB hostname. For internal deployments, skip this step and use the `alb_dns_name` output directly.
 
 Set the hosted zone name that contains `ingress_host`:
 
@@ -321,7 +344,7 @@ ingress_host  = "fortiaigate.example.com"  # optional
 
 The NGINX ingress controller must be installed in the cluster separately (e.g. via the `ingress-nginx` Helm chart).
 
-### AWS ALB
+### AWS ALB (internet-facing)
 
 ```hcl
 ingress_class = "alb"
@@ -337,9 +360,37 @@ ingress_annotations = {
 }
 ```
 
-When `ingress_class = "alb"` and `aws_load_balancer_controller_enabled = true`, Terraform installs the AWS Load Balancer Controller in `kube-system` using IRSA and the AWS EKS Helm chart. Set `aws_load_balancer_controller_enabled = false` only if the controller is already managed outside this stack.
+The ACM certificate ARN must be in the same AWS region as this deployment. The AWS Load Balancer Controller creates the ALB but does not create Route 53 records; manage DNS separately (see [step 6](#6-publish-route-53-dns-for-internet-facing-aws-alb)).
 
-The ACM certificate ARN used by `alb.ingress.kubernetes.io/certificate-arn` must be in the same AWS region as this deployment. The AWS Load Balancer Controller creates the ALB, but it does not create Route 53 records by itself; manage DNS separately, for example with ExternalDNS or a Route 53 alias/CNAME after the ALB hostname is available.
+### AWS ALB (internal)
+
+For deployments where all traffic enters through a private network (VPN, Direct Connect, Transit Gateway, or a FortiGate acting as a VPC gateway):
+
+```hcl
+ingress_class                        = "alb"
+aws_load_balancer_controller_enabled = true
+internal                             = true
+```
+
+Setting `internal = true` configures the ALB with `scheme: internal`, placing it in the private subnets (already tagged `kubernetes.io/role/internal-elb: 1`). The ALB is reachable only from within the VPC and connected networks — no public IP, no ACM certificate required, and no Route 53 entry needed.
+
+The AWS Load Balancer Controller automatically manages the ALB security group (inbound open on the listener port) and adds the corresponding inbound rule to the EKS node security group. No manual security group configuration is required.
+
+After `terraform apply`, retrieve the ALB hostname and configure callers accordingly:
+
+```bash
+terraform output alb_dns_name
+```
+
+All three services are exposed via path-based routing on the same ALB listener:
+
+| Caller | Path | Backend |
+|--------|------|---------|
+| FortiGate → WebUI | `/` | webui (port 3000) |
+| Chatbot → API | `/api/` | api (port 8000) |
+| Chatbot → Core | `/v1/` | core (port 8080) |
+
+When `ingress_class = "alb"` and `aws_load_balancer_controller_enabled = true`, Terraform installs the AWS Load Balancer Controller in `kube-system` using IRSA and the AWS EKS Helm chart. Set `aws_load_balancer_controller_enabled = false` only if the controller is already managed outside this stack.
 
 ---
 
@@ -378,6 +429,7 @@ Files are merged left-to-right before the built-in `set {}` blocks, so Terraform
 | `licenses` | map(string) | `{}` | Node name → local license file path |
 | `update_strategy` | string | `"Recreate"` | `Recreate` or `RollingUpdate` |
 | `extra_values_files` | list(string) | `[]` | Additional Helm values files to merge |
+| `internal` | bool | `false` | Set ALB scheme to `internal`; requires `ingress_class = "alb"` |
 
 ---
 

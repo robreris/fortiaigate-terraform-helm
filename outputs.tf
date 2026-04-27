@@ -27,3 +27,16 @@ output "ingress_host" {
   description = "Configured ingress hostname (empty = matches all hosts)"
   value       = var.ingress_host
 }
+
+data "kubernetes_ingress_v1" "fortiaigate" {
+  metadata {
+    name      = "fortiaigate-ingress"
+    namespace = var.namespace
+  }
+  depends_on = [helm_release.fortiaigate]
+}
+
+output "alb_dns_name" {
+  description = "ALB hostname assigned by AWS — use this to configure the FortiGate and chatbot"
+  value       = try(data.kubernetes_ingress_v1.fortiaigate.status[0].load_balancer[0].ingress[0].hostname, "not yet assigned — run: kubectl get ingress fortiaigate-ingress -n ${var.namespace}")
+}

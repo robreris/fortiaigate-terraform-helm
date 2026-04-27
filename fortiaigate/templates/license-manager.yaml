@@ -19,6 +19,8 @@ spec:
       component: license-manager
   template:
     metadata:
+      annotations:
+        checksum/tls: {{ include "fortiaigate.tlsChecksum" . | quote }}
       labels:
         app: license-manager
         component: license-manager
@@ -34,6 +36,14 @@ spec:
                     operator: In
                     values:
                       {{- keys .Values.global.licenses | toYaml | nindent 22 }}
+      {{- end }}
+      {{- with .Values.license_manager.placement.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.license_manager.placement.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
         runAsNonRoot: true
@@ -130,7 +140,7 @@ spec:
       {{- if or .Values.tls.enabled .Values.redis.tls.enabled }}
       - name: tls-certs
         secret:
-          secretName: fortiaigate-tls-secret
+          secretName: {{ include "fortiaigate.tlsSecretName" . }}
       {{- end }}
       - name: license
         configMap:

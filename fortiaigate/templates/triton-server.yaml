@@ -1,3 +1,4 @@
+{{- if .Values.fortiaigate.gpu.enabled }}
 # Triton Inference Server Deployment with Repository Agent
 # Serves all 5 security models with GPU acceleration, dynamic batching, and rate limiting
 apiVersion: apps/v1
@@ -34,6 +35,14 @@ spec:
                     operator: In
                     values:
                       {{- keys .Values.global.licenses | toYaml | nindent 22 }}
+      {{- end }}
+      {{- with .Values.fortiaigate.gpuWorkloadPlacement.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.fortiaigate.gpuWorkloadPlacement.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
         runAsNonRoot: false  # Triton container runs as root
@@ -588,3 +597,5 @@ data:
         }
       ]
     }
+
+{{- end }}

@@ -1,5 +1,6 @@
 .codex
 .kuberlr
+TODO.txt
 .terraform/
 # .terraform.lock.hcl records exact provider version selections and is safe to commit.
 # HashiCorp recommends tracking it for reproducible builds. Remove this line if you

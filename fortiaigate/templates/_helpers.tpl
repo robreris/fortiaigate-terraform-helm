@@ -67,3 +67,23 @@ Return the proper namespace
 {{- define "fortiaigate.namespace" -}}
 {{- .Release.Namespace }}
 {{- end }}
+
+{{/*
+Return the TLS secret name used by FortiAIGate workloads.
+*/}}
+{{- define "fortiaigate.tlsSecretName" -}}
+{{- default "fortiaigate-tls-secret" .Values.tls.existingSecret }}
+{{- end }}
+
+{{/*
+Return a checksum that changes when TLS material changes.
+When Terraform manages the TLS secret, it passes tls.existingSecretChecksum.
+When Helm manages the TLS secret, checksum the chart certificate files.
+*/}}
+{{- define "fortiaigate.tlsChecksum" -}}
+{{- if .Values.tls.existingSecretChecksum }}
+{{- .Values.tls.existingSecretChecksum }}
+{{- else }}
+{{- printf "%s%s" (tpl (.Files.Get .Values.tls.cert) $) (tpl (.Files.Get .Values.tls.key) $) | sha256sum }}
+{{- end }}
+{{- end }}

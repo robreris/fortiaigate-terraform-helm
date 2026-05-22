@@ -5,7 +5,6 @@ Known gaps and planned improvements. File an issue if you'd like to pick one up.
 ## Reliability
 
 - **Stronger first-party workload health checks.** `api`, `webui`, and `logd` have no readiness/liveness probes. `core` and the scanners have readiness only. For ALB ingress, also add explicit per-service health check annotations so target health reflects real service readiness.
-- **Chart standalone render/lint.** `templates/license.yaml` references `.Values.license.existingConfigMap` but `license:` is missing from `values.yaml`. Terraform masks this by always setting `license.existingConfigMap`, but `helm template fortiaigate/` fails outside Terraform.
 - **Edge cases in chart templates.**
   - Setting `fortiaigate.env.csrfSecretKey` renders invalid env YAML (`value` ends up nested under `valueFrom`).
   - Unset `scanners.env.maxRpcConcurrency` renders `value:` as null.
@@ -28,3 +27,4 @@ Known gaps and planned improvements. File an issue if you'd like to pick one up.
 
 - ✅ Fix GPU/Triton scheduling: `gpu_enabled = false` cleanly removes Triton; Terraform-injected placement values flow through chart templates.
 - ✅ Reliable TLS secret rotation: chart workloads honor the configured secret name; Terraform passes a deterministic cert checksum so first-party workloads, PostgreSQL, and Redis annotate pods to trigger rollouts on rotation.
+- ✅ Chart standalone `helm lint` passes: added stub `license:` block and placeholder `image.repository`/`image.tag` defaults to `values.yaml` so the chart renders cleanly without Terraform supplying every value.

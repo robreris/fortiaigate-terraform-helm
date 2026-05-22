@@ -22,14 +22,17 @@ global:
 
 # FortiAIGate Global Configuration
 fortiaigate:
-  # Common image configuration
+  # Common image configuration.
+  # Terraform sets these from var.image_repository and var.image_tag (see helm.tf).
+  # The placeholder defaults below exist so `helm lint` and `helm template`
+  # render valid YAML when the chart is exercised standalone — they are not
+  # valid for an actual install.
   image:
-    # Specify your container registry address and image tag.
     # Example:
     # repository: 192.168.0.1:5000
     # tag: v8.0.0-build0001
-    repository: 
-    tag: 
+    repository: "example.com/fortiaigate"
+    tag: "latest"
     pullPolicy: IfNotPresent
     pullSecrets: []
 
@@ -246,6 +249,14 @@ scanners:
     #   requests:
     #     cpu: 250m
     #     memory: 256Mi
+
+# License ConfigMap. Terraform sets license.existingConfigMap to the name of
+# the ConfigMap it creates from var.licenses (see licenses.tf). When the
+# chart is rendered standalone (helm template / helm lint), the empty default
+# below causes templates/license.yaml to render an in-chart ConfigMap from
+# global.licenses instead.
+license:
+  existingConfigMap: ""
 
 license_manager:
   placement:

@@ -26,6 +26,11 @@ variable "app_node_count" {
   description = "Number of application nodes"
   type        = number
   default     = 2
+
+  validation {
+    condition     = var.app_node_count >= 1
+    error_message = "app_node_count must be at least 1."
+  }
 }
 
 variable "gpu_enabled" {
@@ -43,6 +48,11 @@ variable "gpu_node_instance_type" {
 variable "image_repository" {
   description = "Container registry prefix for FortiAIGate images (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/fortiaigate)"
   type        = string
+
+  validation {
+    condition     = length(var.image_repository) > 0
+    error_message = "image_repository is required and must point at a registry containing the FortiAIGate images."
+  }
 }
 
 variable "image_tag" {
@@ -61,6 +71,11 @@ variable "ingress_class" {
   description = "Ingress class name. Use 'nginx' for nginx-ingress or 'alb' for AWS Load Balancer Controller."
   type        = string
   default     = "nginx"
+
+  validation {
+    condition     = contains(["nginx", "alb"], var.ingress_class)
+    error_message = "ingress_class must be either 'nginx' or 'alb'."
+  }
 }
 
 variable "ingress_host" {
@@ -91,6 +106,11 @@ variable "storage_size" {
   description = "Size of the shared EFS-backed PVC"
   type        = string
   default     = "100Gi"
+
+  validation {
+    condition     = can(regex("^[0-9]+(Mi|Gi|Ti)$", var.storage_size))
+    error_message = "storage_size must be a Kubernetes quantity with a binary suffix (e.g. '100Gi', '500Mi', '1Ti')."
+  }
 }
 
 variable "efs_encrypted" {
@@ -109,6 +129,11 @@ variable "update_strategy" {
   description = "Deployment update strategy. 'Recreate' avoids GPU deadlock on single-GPU nodes; 'RollingUpdate' for zero-downtime when spare capacity exists."
   type        = string
   default     = "Recreate"
+
+  validation {
+    condition     = contains(["Recreate", "RollingUpdate"], var.update_strategy)
+    error_message = "update_strategy must be either 'Recreate' or 'RollingUpdate'."
+  }
 }
 
 variable "extra_values_files" {
@@ -121,4 +146,9 @@ variable "internal" {
   description = "Deploy as an internal (private) service. Sets the ALB scheme to 'internal' so it is only reachable within the VPC and connected networks. Requires ingress_class = 'alb'."
   type        = bool
   default     = false
+
+  validation {
+    condition     = !var.internal || var.ingress_class == "alb"
+    error_message = "internal = true is only supported with ingress_class = 'alb'."
+  }
 }

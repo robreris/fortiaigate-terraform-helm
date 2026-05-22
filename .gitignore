@@ -1,11 +1,8 @@
 .codex
 .kuberlr
-TODO.txt
 .terraform/
-# .terraform.lock.hcl records exact provider version selections and is safe to commit.
-# HashiCorp recommends tracking it for reproducible builds. Remove this line if you
-# want to pin provider versions across team members and CI.
-.terraform.lock.hcl
+# .terraform.lock.hcl is tracked in git for reproducible provider selections.
+# Run `terraform init -upgrade` to refresh it.
 
 # Large vendor artifacts
 *.tar
@@ -65,9 +62,13 @@ override.tf.json
 *.tfvars
 *.tfvars.json
 !*.tfvars.example
+# Example scenarios in examples/ are placeholders meant to be committed.
+!examples/**/*.tfvars
 
-# Per-account backend configs (backends/*.hcl) contain only bucket/table names
-# and are safe to commit — no exceptions needed here.
+# Per-account backend configs — contain bucket names and account IDs.
+# Commit backends/*.hcl.example as templates; keep actual configs local.
+backends/*.hcl
+!backends/*.hcl.example
 
 # kube and render output
 *.kubeconfig

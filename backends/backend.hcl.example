@@ -1,0 +1,16 @@
+# Backend config template. Copy this file to backends/<your-name>.hcl,
+# fill in the bucket and region, then run:
+#
+#   terraform init -backend-config=backends/<your-name>.hcl [-reconfigure]
+#
+# Prerequisites: create the S3 bucket and DynamoDB lock table in the target
+# account first. See docs/remote-state.md for the one-time bootstrap commands.
+#
+# Files matching backends/*.hcl are gitignored to keep account IDs out of git.
+# Only backends/*.hcl.example files are committed.
+
+bucket         = "fortiaigate-tfstate-<aws-account-id>"
+key            = "fortiaigate-eks/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "terraform-state-lock"
+encrypt        = true

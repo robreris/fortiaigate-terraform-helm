@@ -107,6 +107,10 @@ resource "helm_release" "nvidia_device_plugin" {
   namespace  = "kube-system"
 
   set {
+    name  = "nodeSelector.fortiaigate-role"
+    value = "gpu"
+  }
+  set {
     name  = "tolerations[0].key"
     value = "fortiaigate-gpu"
   }

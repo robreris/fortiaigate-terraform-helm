@@ -45,6 +45,17 @@ variable "gpu_node_instance_type" {
   default     = "g5.2xlarge"
 }
 
+variable "gpu_node_ami_type" {
+  description = "EKS managed node group AMI type for GPU nodes. Use AL2023_x86_64_NVIDIA for CUDA 13+ container compatibility."
+  type        = string
+  default     = "AL2023_x86_64_NVIDIA"
+
+  validation {
+    condition     = contains(["AL2023_x86_64_NVIDIA", "AL2_x86_64_GPU"], var.gpu_node_ami_type)
+    error_message = "gpu_node_ami_type must be either AL2023_x86_64_NVIDIA or AL2_x86_64_GPU."
+  }
+}
+
 variable "image_repository" {
   description = "Container registry prefix for FortiAIGate images (e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com/fortiaigate)"
   type        = string

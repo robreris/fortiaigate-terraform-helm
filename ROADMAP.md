@@ -5,10 +5,6 @@ Known gaps and planned improvements. File an issue if you'd like to pick one up.
 ## Reliability
 
 - **Stronger first-party workload health checks.** `api`, `webui`, and `logd` have no readiness/liveness probes. `core` and the scanners have readiness only. For ALB ingress, also add explicit per-service health check annotations so target health reflects real service readiness.
-- **Edge cases in chart templates.**
-  - Setting `fortiaigate.env.csrfSecretKey` renders invalid env YAML (`value` ends up nested under `valueFrom`).
-  - Unset `scanners.env.maxRpcConcurrency` renders `value:` as null.
-
 ## Architecture
 
 - **Revisit shared EFS persistence layout.** One RWX EFS PVC currently backs app data, PostgreSQL, and Redis. For production, consider Amazon RDS / ElastiCache, or at minimum separate PVCs per workload for better isolation and performance.
@@ -26,5 +22,7 @@ Known gaps and planned improvements. File an issue if you'd like to pick one up.
 ## Done
 
 - ✅ Fix GPU/Triton scheduling: `gpu_enabled = false` cleanly removes Triton; Terraform-injected placement values flow through chart templates.
+- ✅ Guard GPU licensed-node scheduling: when GPU is enabled and licenses are supplied, Terraform requires enough license entries to cover app node(s) plus the GPU node.
+- ✅ Fix chart env rendering edge cases: manually supplied CSRF secrets render as `value`, and unset scanner RPC concurrency is omitted.
 - ✅ Reliable TLS secret rotation: chart workloads honor the configured secret name; Terraform passes a deterministic cert checksum so first-party workloads, PostgreSQL, and Redis annotate pods to trigger rollouts on rotation.
 - ✅ Chart standalone `helm lint` passes: added stub `license:` block and placeholder `image.repository`/`image.tag` defaults to `values.yaml` so the chart renders cleanly without Terraform supplying every value.

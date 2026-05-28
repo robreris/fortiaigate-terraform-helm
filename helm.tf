@@ -137,6 +137,13 @@ resource "helm_release" "fortiaigate" {
   namespace = kubernetes_namespace.fortiaigate.metadata[0].name
   timeout   = 1200
 
+  lifecycle {
+    precondition {
+      condition     = !var.gpu_enabled || length(var.licenses) == 0 || length(var.licenses) >= var.app_node_count + 1
+      error_message = "When gpu_enabled is true and licenses are provided, include licenses for the app node(s) plus the GPU node. Get the GPU node name with: kubectl get nodes -l fortiaigate-role=gpu -o custom-columns=NAME:.metadata.name --no-headers"
+    }
+  }
+
   depends_on = [
     kubernetes_storage_class.efs,
     kubernetes_config_map.licenses,

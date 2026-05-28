@@ -55,8 +55,9 @@ module "eks" {
     var.gpu_enabled ? {
       gpu = {
         instance_types = [var.gpu_node_instance_type]
-        # Amazon Linux 2 GPU-optimized AMI with NVIDIA drivers and container toolkit
-        ami_type     = "AL2_x86_64_GPU"
+        # Use the AL2023 NVIDIA AMI by default so GPU containers with CUDA 13+
+        # runtimes have a compatible host driver.
+        ami_type     = var.gpu_node_ami_type
         min_size     = 0
         max_size     = 1
         desired_size = 1

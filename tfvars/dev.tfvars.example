@@ -59,5 +59,8 @@ efs_encrypted = false
 #   kubectl get nodes -o custom-columns=NAME:.metadata.name --no-headers
 
 licenses = {
-  # "ip-10-0-x-x.us-east-1.compute.internal" = "licenses/YOURNODE.lic"
+  # App node:
+  # "ip-10-0-x-x.us-east-1.compute.internal" = "licenses/app-node.lic"
+  # GPU node when gpu_enabled = true:
+  # "ip-10-0-y-y.us-east-1.compute.internal" = "licenses/gpu-node.lic"
 }

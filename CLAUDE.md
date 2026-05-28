@@ -60,7 +60,7 @@ To switch accounts: change AWS credentials, then `terraform init -backend-config
 
 **Licenses are node-keyed.** `var.licenses` maps EC2 private DNS names (e.g. `ip-10-0-1-100.us-east-1.compute.internal`) to local license file paths. `licenses.tf` reads each file and stuffs it in a `fortiaigate-license-config` ConfigMap; the license-manager DaemonSet uses node affinity on the names to deliver the right license to each node. Node names must match `kubectl get nodes` output exactly — they're discovered post-apply, so the initial deploy runs without licenses and a second apply adds them.
 
-**GPU is optional and tainted.** `var.gpu_enabled = true` adds a single-node `g5.2xlarge` group on the `AL2_x86_64_GPU` AMI, tainted `fortiaigate-gpu=true:NoSchedule`. Terraform also installs the NVIDIA device plugin Helm release with matching tolerations. Triton is the only workload scheduled there.
+**GPU is optional and tainted.** `var.gpu_enabled = true` adds a single-node `g5.2xlarge` group on the `AL2023_x86_64_NVIDIA` AMI by default, tainted `fortiaigate-gpu=true:NoSchedule`. Terraform also installs the NVIDIA device plugin Helm release with matching tolerations. Triton is the only workload scheduled there.
 
 **ALB controller installation is conditional.** `local.manage_aws_load_balancer_controller = var.aws_load_balancer_controller_enabled && var.ingress_class == "alb"` in `aws-load-balancer-controller.tf`. If `false`, the ingress resource still gets created but stays without an address until an externally-managed controller picks it up.
 

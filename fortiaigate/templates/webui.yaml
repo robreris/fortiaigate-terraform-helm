@@ -53,6 +53,23 @@ spec:
         command: ["node", "https-server.js"]
         ports:
         - containerPort: 3000
+          name: http
+          protocol: TCP
+        # Readiness probe doubles as the source AGIC/ALB derive the per-backend
+        # health probe from (see api.yaml for why per-backend paths are needed).
+        # The Next.js UI is served under basePath /ui, so / 404s and only /ui
+        # returns 200 -- that's both the health path and the browser entry point.
+        readinessProbe:
+          httpGet:
+            path: /ui
+            port: http
+            {{- if .Values.tls.enabled }}
+            scheme: HTTPS
+            {{- end }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
         resources:
           {{- toYaml .Values.webui.resources | nindent 10 }}
         env:
@@ -88,11 +105,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: webui
-  labels:
-    app.kubernetes.io/name: fortiaigate
-    app.kubernetes.io/part-of: fortiaigate-platform
-    app.kubernetes.io/managed-by: helm
+    name: webui
+    {{ if eq .Values.ingress.className "alb" }}
+    annotations:
+      alb.ingress.kubernetes.io/healthcheck-path: /ui
+    {{- end }}
+    labels:
+      app.kubernetes.io/name: fortiaigate
+      app.kubernetes.io/part-of: fortiaigate-platform
+      app.kubernetes.io/managed-by: helm
 spec:
   selector:
     app: webui
